@@ -9,7 +9,9 @@ import { ExploreResponse } from "@/app/api/explore/route";
 interface RecentSearch {
   input: string;
   name: string;
-  cuisine_type: string;
+  cuisine_type: string;      // fallback — language at time of first search
+  cuisine_type_zh?: string;  // Chinese version (populated when searched in zh)
+  cuisine_type_en?: string;  // English version (populated when searched in en)
   timestamp: number;
 }
 
@@ -136,15 +138,56 @@ function loadRecent(): RecentSearch[] {
   }
 }
 
-function pushRecent(entry: RecentSearch, existing: RecentSearch[]): RecentSearch[] {
+function pushRecent(
+  entry: RecentSearch,
+  lang: "zh" | "en",
+  existing: RecentSearch[]
+): RecentSearch[] {
+  // Carry forward any already-known language-specific cuisine types from old entry
+  const prev = existing.find(
+    (s) => s.name.toLowerCase().trim() === entry.name.toLowerCase().trim()
+  );
+  const langKey = lang === "zh" ? "cuisine_type_zh" : "cuisine_type_en";
+  const merged: RecentSearch = {
+    // Inherit the OTHER language version (if already known) from the previous entry
+    ...(prev ? { cuisine_type_zh: prev.cuisine_type_zh, cuisine_type_en: prev.cuisine_type_en } : {}),
+    ...entry,
+    // Always write the current language's fresh value
+    [langKey]: entry.cuisine_type,
+  };
+
   // Deduplicate by both input string and restaurant name (case-insensitive)
   const deduped = existing.filter(
     (s) =>
       s.input !== entry.input &&
       s.name.toLowerCase().trim() !== entry.name.toLowerCase().trim()
   );
-  const updated = [entry, ...deduped].slice(0, MAX_RECENT);
+  const updated = [merged, ...deduped].slice(0, MAX_RECENT);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  return updated;
+}
+
+/**
+ * Updates only the language-specific cuisine_type for a given restaurant name,
+ * WITHOUT changing the entry's position in the list (used on language-switch re-fetch).
+ */
+function patchRecentLangCuisine(
+  name: string,
+  cuisineType: string,
+  lang: "zh" | "en",
+  existing: RecentSearch[]
+): RecentSearch[] {
+  const langKey = lang === "zh" ? "cuisine_type_zh" : "cuisine_type_en";
+  const updated = existing.map((s) =>
+    s.name.toLowerCase().trim() === name.toLowerCase().trim()
+      ? { ...s, [langKey]: cuisineType }
+      : s
+  );
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  } catch {
+    // ignore
+  }
   return updated;
 }
 
@@ -340,7 +383,7 @@ export default function ExplorePage() {
               cuisine_type: cached.restaurant.cuisine_type,
               timestamp: Date.now(),
             };
-            setRecentSearches((prev) => pushRecent(entry, prev));
+            setRecentSearches((prev) => pushRecent(entry, language, prev));
           }
           setLoading(false);
           setIsTranslating(false);
@@ -393,7 +436,13 @@ export default function ExplorePage() {
             cuisine_type: data.restaurant.cuisine_type,
             timestamp: Date.now(),
           };
-          setRecentSearches((prev) => pushRecent(entry, prev));
+          setRecentSearches((prev) => pushRecent(entry, language, prev));
+        } else {
+          // Language-change re-fetch: patch cuisine_type for the new language
+          // in-place without moving the entry to the top of the list.
+          setRecentSearches((prev) =>
+            patchRecentLangCuisine(data.restaurant.name, data.restaurant.cuisine_type, language, prev)
+          );
         }
       } catch {
         setError(t.common.error);
@@ -598,7 +647,7 @@ export default function ExplorePage() {
                             {search.name}
                           </p>
                           <p className="text-xs text-gray-400 mt-0.5">
-                            {search.cuisine_type}
+                            {(language === "zh" ? search.cuisine_type_zh : search.cuisine_type_en) ?? search.cuisine_type}
                           </p>
                         </div>
                         {/* Arrow hint */}
@@ -728,14 +777,102 @@ export default function ExplorePage() {
                 {/* Tab Content */}
                 <div className="p-4 md:p-6">
                   {activeTab === "intro" && (
-                    <p className="text-gray-700 leading-relaxed whitespace-pre-line text-sm">
-                      {result.ai.introduction}
-                    </p>
+                    <div className="space-y-4">
+                      <p className="text-gray-700 leading-relaxed whitespace-pre-line text-sm">
+                        {result.ai.introduction}
+                      </p>
+
+                      {/* ── Restaurant Spotlight card ── */}
+                      {result.ai.restaurant_spotlight && (
+                        <div className="rounded-xl border border-orange-100 bg-orange-50 overflow-hidden">
+                          <h4 className="px-4 pt-3 pb-1 text-xs font-semibold text-orange-600 uppercase tracking-wide">
+                            {t.explore.restaurantSpotlight}
+                          </h4>
+                          <div className="divide-y divide-orange-100">
+                            {(
+                              [
+                                { icon: "📍", label: t.explore.neighborhood, value: result.ai.restaurant_spotlight.neighborhood },
+                                { icon: "🕐", label: t.explore.hours,        value: result.ai.restaurant_spotlight.hours },
+                                { icon: "🅿️",  label: t.explore.parking,      value: result.ai.restaurant_spotlight.parking },
+                              ] as { icon: string; label: string; value: string }[]
+                            ).map(({ icon, label, value }) => (
+                              <div key={label} className="flex gap-3 px-4 py-2.5 text-sm">
+                                <span className="text-base leading-snug flex-shrink-0">{icon}</span>
+                                <div className="min-w-0">
+                                  <span className="font-medium text-gray-700">{label}</span>
+                                  <p className="text-gray-600 text-xs mt-0.5 leading-relaxed">{value}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="px-4 py-2 text-[11px] text-gray-400 text-right border-t border-orange-100">
+                            ⚠ {t.explore.aiEstimate}
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   )}
                   {activeTab === "history" && (
-                    <p className="text-gray-700 leading-relaxed whitespace-pre-line text-sm">
-                      {result.ai.history}
-                    </p>
+                    <div className="space-y-5">
+                      <p className="text-gray-700 leading-relaxed whitespace-pre-line text-sm">
+                        {result.ai.history}
+                      </p>
+
+                      {/* ── Cuisine character chips ── */}
+                      {(result.ai.common_ingredients?.length ?? 0) > 0 && (
+                        <div>
+                          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                            🥕 {t.explore.commonIngredients}
+                          </h4>
+                          <div className="flex flex-wrap gap-2">
+                            {result.ai.common_ingredients!.map((item) => (
+                              <span
+                                key={item}
+                                className="px-2.5 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-medium"
+                              >
+                                {item}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {(result.ai.common_spices?.length ?? 0) > 0 && (
+                        <div>
+                          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                            🧂 {t.explore.commonSpices}
+                          </h4>
+                          <div className="flex flex-wrap gap-2">
+                            {result.ai.common_spices!.map((item) => (
+                              <span
+                                key={item}
+                                className="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium"
+                              >
+                                {item}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {(result.ai.food_pairings?.length ?? 0) > 0 && (
+                        <div>
+                          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                            🍷 {t.explore.foodPairings}
+                          </h4>
+                          <div className="flex flex-wrap gap-2">
+                            {result.ai.food_pairings!.map((item) => (
+                              <span
+                                key={item}
+                                className="px-2.5 py-1 bg-rose-100 text-rose-700 rounded-full text-xs font-medium"
+                              >
+                                {item}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
                   {activeTab === "dishes" && (
                     <div className="space-y-4">
@@ -821,6 +958,47 @@ export default function ExplorePage() {
                                 <p className="text-sm text-gray-600 leading-relaxed">
                                   {dish.description}
                                 </p>
+
+                                {/* Key ingredient chips */}
+                                {(dish.key_ingredients?.length ?? 0) > 0 && (
+                                  <div className="mt-2 flex flex-wrap gap-1.5">
+                                    {dish.key_ingredients!.map((ing) => (
+                                      <span
+                                        key={ing}
+                                        className="px-2 py-0.5 bg-white border border-orange-200 text-orange-600 rounded-full text-[11px] font-medium"
+                                      >
+                                        {ing}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {/* Cooking method */}
+                                {dish.cooking_method && (
+                                  <p className="mt-2 text-xs text-gray-500 leading-relaxed">
+                                    <span className="font-medium text-gray-600">
+                                      🍳 {t.explore.cookingMethod}:
+                                    </span>{" "}
+                                    {dish.cooking_method}
+                                  </p>
+                                )}
+
+                                {/* How to eat */}
+                                {dish.how_to_eat && (
+                                  <p className="mt-1 text-xs text-gray-500 leading-relaxed">
+                                    <span className="font-medium text-gray-600">
+                                      🥢 {t.explore.howToEat}:
+                                    </span>{" "}
+                                    {dish.how_to_eat}
+                                  </p>
+                                )}
+
+                                {/* Price */}
+                                {dish.price_range && (
+                                  <p className="mt-2 text-xs font-semibold text-orange-600">
+                                    💴 {t.explore.priceRange}: {dish.price_range}
+                                  </p>
+                                )}
                               </div>
                             </div>
 
@@ -1123,7 +1301,7 @@ export default function ExplorePage() {
                       {search.name}
                     </p>
                     <p className="text-xs text-gray-400 mt-0.5 truncate">
-                      {search.cuisine_type}
+                      {(language === "zh" ? search.cuisine_type_zh : search.cuisine_type_en) ?? search.cuisine_type}
                     </p>
                   </button>
                 ))}

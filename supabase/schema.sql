@@ -225,3 +225,111 @@ create trigger update_restaurants_updated_at before update on public.restaurants
   for each row execute procedure public.update_updated_at();
 create trigger update_conversations_updated_at before update on public.conversations
   for each row execute procedure public.update_updated_at();
+
+-- ─────────────────────────────────────────────
+-- 8. AI Prompt 管理表
+--    存储所有 OpenAI prompt，方便在不重新部署的情况下修改
+--    Templates 使用 {{placeholder}} 语法
+-- ─────────────────────────────────────────────
+create table if not exists public.ai_prompts (
+  id           uuid        primary key default gen_random_uuid(),
+  key          text        unique not null,        -- 唯一标识，e.g. "restaurant_info_system"
+  content      text        not null,               -- prompt 正文（user template 用 {{placeholder}}）
+  role         text        not null check (role in ('system', 'user')),
+  model        text,                               -- OpenAI model（仅 system 行有效）
+  temperature  float,                              -- 生成温度（仅 system 行有效）
+  max_tokens   integer,                            -- 最大 token 数（仅 system 行有效）
+  description  text,                               -- 人工备注
+  is_active    boolean     not null default true,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+
+-- 允许未登录服务端代码读取（anon key）
+alter table public.ai_prompts enable row level security;
+
+create policy "Public read ai_prompts" on public.ai_prompts
+  for select using (true);
+
+-- 自动更新 updated_at
+create trigger update_ai_prompts_updated_at before update on public.ai_prompts
+  for each row execute procedure public.update_updated_at();
+
+-- ── 初始 Prompt 数据 ───────────────────────────────────────────────────────────
+-- 使用 $$ 美元符号引用避免单引号转义问题。
+-- 修改 content 后重新运行 INSERT … ON CONFLICT DO UPDATE 即可热更新。
+
+insert into public.ai_prompts (key, role, model, temperature, max_tokens, description, content)
+values (
+  'restaurant_info_system',
+  'system',
+  'gpt-4o-mini',
+  0.7,
+  2500,
+  'System prompt for restaurant info generation (also holds model/temperature/max_tokens config)',
+  $prompt$You are an expert culinary historian and food critic.
+Your task is to provide detailed, accurate, and engaging information about restaurants and their cuisines.
+Always respond in valid JSON format with no markdown formatting.$prompt$
+)
+on conflict (key) do update
+  set content     = excluded.content,
+      model       = excluded.model,
+      temperature = excluded.temperature,
+      max_tokens  = excluded.max_tokens,
+      description = excluded.description,
+      updated_at  = now();
+
+insert into public.ai_prompts (key, role, description, content)
+values (
+  'restaurant_info_user',
+  'user',
+  'User prompt template for restaurant info. Placeholders: {{name}}, {{address}}, {{types}}, {{rating}}, {{lang}}',
+  $prompt$Restaurant details:
+- Name: {{name}}
+- Address: {{address}}
+- Categories: {{types}}
+- Rating: {{rating}}
+
+Please provide a comprehensive guide in {{lang}}.
+Respond with ONLY a JSON object (no markdown, no code blocks) with these exact fields:
+
+{
+  "cuisine_type": "Brief cuisine label (e.g., 日本料理, Italian, Sichuan Chinese) - max 20 chars",
+
+  "introduction": "2-3 engaging paragraphs introducing this restaurant and its cuisine style. Include what makes it unique.",
+
+  "restaurant_spotlight": {
+    "neighborhood": "1-2 sentences describing the neighborhood character based on the address. If address is unknown, describe what kind of location this cuisine type typically favors.",
+    "hours": "Typical operating hours for this type of restaurant. Format: 'Mon–Fri HH:mm–HH:mm, Sat–Sun HH:mm–HH:mm'. Append '(请以实际营业时间为准)' in Chinese or '(estimate — verify on-site)' in English.",
+    "parking": "1 sentence on parking accessibility inferred from the address and area type (e.g. street parking, garage nearby, difficult in dense urban area)."
+  },
+
+  "history": "2-3 paragraphs about the cultural and historical background of this cuisine type. Include origin, evolution, and cultural significance.",
+
+  "common_ingredients": ["Up to 8 ingredients that define this cuisine — single words or short phrases, e.g. 'Rice noodles', 'Lemongrass'"],
+
+  "common_spices": ["Up to 6 signature spices, sauces, or condiments used in this cuisine, e.g. 'Fish sauce', 'Five-spice powder'"],
+
+  "food_pairings": ["Up to 5 drinks, sides, or accompaniments that pair well with this cuisine, e.g. 'Jasmine tea', 'Cold beer', 'Steamed rice'"],
+
+  "signature_dishes": [
+    {
+      "name": "Dish name in {{lang}} (for display)",
+      "search_name": "Dish name in its ORIGINAL menu language, e.g. English for Western/Japanese/Italian restaurants, Chinese for Chinese restaurants — used for image search only",
+      "description": "50-70 word overview of this dish's taste profile, texture, and cultural significance",
+      "key_ingredients": ["Up to 5 main ingredients in this dish, e.g. 'Wagyu beef', 'Ponzu sauce'"],
+      "cooking_method": "1 sentence describing the primary cooking technique, e.g. 'Slow-braised for 6 hours in aromatic broth until fall-apart tender.'",
+      "how_to_eat": "1-2 sentences on the best way to enjoy this dish — dipping sauces, correct utensils, ideal order of eating, or what to pair it with at the table.",
+      "price_range": "Estimated price at this specific restaurant, inferred from its rating and cuisine type. Use local currency symbol. E.g. '$18-28' or '¥68-98'. Append '(estimate)' or '(参考价格)'."
+    }
+  ],
+
+  "nutrition_highlights": "2 paragraphs summarizing the typical nutritional characteristics of this cuisine. Include macronutrients, common ingredients, and general health impact.",
+
+  "dietary_notes": "1-2 paragraphs covering: common allergens in this cuisine, suitability for vegetarians/vegans, gluten considerations, and general dietary advice."
+}$prompt$
+)
+on conflict (key) do update
+  set content     = excluded.content,
+      description = excluded.description,
+      updated_at  = now();

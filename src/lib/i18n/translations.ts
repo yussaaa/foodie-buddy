@@ -100,6 +100,21 @@ const zh = {
     reviewsSource: "评价来自 Google",
     myRecord: "我的记录",
     editRecord: "编辑",
+    // ── Restaurant spotlight (intro tab) ──────────────────────────────────
+    restaurantSpotlight: "餐厅信息",
+    neighborhood: "周边环境",
+    hours: "营业时间",
+    parking: "停车",
+    aiEstimate: "AI 估计，请以实际为准",
+    // ── Cuisine character (history tab) ────────────────────────────────────
+    commonIngredients: "常用食材",
+    commonSpices: "常用调料",
+    foodPairings: "搭配推荐",
+    // ── Dish card detail (dishes tab) ──────────────────────────────────────
+    keyIngredients: "主要食材",
+    cookingMethod: "烹饪方式",
+    howToEat: "怎么吃",
+    priceRange: "参考价格",
   },
   map: {
     title: "美食地图",
@@ -226,6 +241,21 @@ const en: TranslationSchema = {
     reviewsSource: "Reviews from Google",
     myRecord: "My Notes",
     editRecord: "Edit",
+    // ── Restaurant spotlight (intro tab) ──────────────────────────────────
+    restaurantSpotlight: "Restaurant Info",
+    neighborhood: "Neighborhood",
+    hours: "Hours",
+    parking: "Parking",
+    aiEstimate: "AI estimate — verify on-site",
+    // ── Cuisine character (history tab) ────────────────────────────────────
+    commonIngredients: "Key Ingredients",
+    commonSpices: "Common Spices",
+    foodPairings: "Goes Well With",
+    // ── Dish card detail (dishes tab) ──────────────────────────────────────
+    keyIngredients: "Ingredients",
+    cookingMethod: "Cooking",
+    howToEat: "How to Eat",
+    priceRange: "Est. Price",
   },
   map: {
     title: "Food Map",

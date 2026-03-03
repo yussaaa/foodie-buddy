@@ -151,7 +151,7 @@ async function fetchDallE(q: string): Promise<PhotoResult | null> {
       quality: "standard",
     });
 
-    const url = response.data[0]?.url;
+    const url = response.data?.[0]?.url;
     return url ? { url, source: "openai" } : null;
   } catch (err) {
     console.warn("[DALL·E] Generation failed:", err);
