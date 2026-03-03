@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
+import { getOpenAIClient } from "@/lib/openai";
 
 /**
  * GET /api/dish-photo?q={dishName}
@@ -28,8 +28,6 @@ import OpenAI from "openai";
 
 type PhotoSource = "google" | "openai" | "wikimedia" | "pexels" | "serper";
 type PhotoResult = { url: string; source: PhotoSource };
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get("q")?.trim();
@@ -143,7 +141,7 @@ async function fetchGoogle(q: string): Promise<PhotoResult | null> {
 
 async function fetchDallE(q: string): Promise<PhotoResult | null> {
   try {
-    const response = await openai.images.generate({
+    const response = await getOpenAIClient().images.generate({
       model: "dall-e-3",
       prompt: `Ultra-realistic close-up food photography of "${q}", shot at macro distance, shallow depth of field, natural window lighting, high texture detail, ingredients clearly identifiable, vibrant but natural colors, editorial food styling, clean background, commercial food product style similar to menu listing, professional DSLR photography, high resolution, crisp focus on food surface texture, subtle highlights on sauce and moisture, no artificial look, no cameras.`,
       n: 1,

@@ -8,7 +8,6 @@ import { useLanguage } from "@/lib/i18n/LanguageContext";
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const supabase = createClient();
   const { t, language, setLanguage } = useLanguage();
 
   const navItems = [
@@ -20,6 +19,9 @@ export default function Sidebar() {
   ];
 
   const handleLogout = async () => {
+    // Instantiate lazily — only when the user actually clicks logout,
+    // never during SSR / static pre-render at build time.
+    const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/login");
     router.refresh();

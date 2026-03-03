@@ -7,7 +7,6 @@ import { useLanguage } from "@/lib/i18n/LanguageContext";
 
 export default function LoginPage() {
   const router = useRouter();
-  const supabase = createClient();
   const { t, language, setLanguage } = useLanguage();
 
   const [mode, setMode] = useState<"login" | "signup">("login");
@@ -24,6 +23,8 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
+    // Instantiate lazily — only on form submit, never during SSR at build time.
+    const supabase = createClient();
 
     if (mode === "signup") {
       const { error } = await supabase.auth.signUp({
