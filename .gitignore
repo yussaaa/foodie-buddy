@@ -36,6 +36,9 @@ mobile/.env
 # vercel
 .vercel
 
+# Claude local settings (may contain API keys)
+.claude/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
