@@ -9,7 +9,7 @@ export default function LoginPage() {
   const router = useRouter();
   const { t, language, setLanguage } = useLanguage();
 
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -19,12 +19,30 @@ export default function LoginPage() {
     text: string;
   } | null>(null);
 
+  const switchMode = (next: "login" | "signup" | "forgot") => {
+    setMode(next);
+    setMessage(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
     // Instantiate lazily — only on form submit, never during SSR at build time.
     const supabase = createClient();
+
+    if (mode === "forgot") {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${location.origin}/auth/callback?next=/auth/reset-password`,
+      });
+      if (error) {
+        setMessage({ type: "error", text: error.message });
+      } else {
+        setMessage({ type: "success", text: t.login.resetEmailSent });
+      }
+      setLoading(false);
+      return;
+    }
 
     if (mode === "signup") {
       const { error } = await supabase.auth.signUp({
@@ -93,35 +111,39 @@ export default function LoginPage() {
           <p className="text-gray-500 text-sm mt-1">{t.login.tagline}</p>
         </div>
 
-        {/* Tab Switch */}
-        <div className="flex bg-gray-100 rounded-xl p-1 mb-6">
-          <button
-            onClick={() => {
-              setMode("login");
-              setMessage(null);
-            }}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
-              mode === "login"
-                ? "bg-white text-orange-600 shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            {t.login.tab_login}
-          </button>
-          <button
-            onClick={() => {
-              setMode("signup");
-              setMessage(null);
-            }}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
-              mode === "signup"
-                ? "bg-white text-orange-600 shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            {t.login.tab_signup}
-          </button>
-        </div>
+        {/* Tab Switch — hidden in forgot mode */}
+        {mode !== "forgot" && (
+          <div className="flex bg-gray-100 rounded-xl p-1 mb-6">
+            <button
+              onClick={() => switchMode("login")}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+                mode === "login"
+                  ? "bg-white text-orange-600 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {t.login.tab_login}
+            </button>
+            <button
+              onClick={() => switchMode("signup")}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+                mode === "signup"
+                  ? "bg-white text-orange-600 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {t.login.tab_signup}
+            </button>
+          </div>
+        )}
+
+        {/* Forgot password header */}
+        {mode === "forgot" && (
+          <div className="mb-6">
+            <h2 className="text-lg font-bold text-gray-800">{t.login.forgotPasswordTitle}</h2>
+            <p className="text-sm text-gray-500 mt-1">{t.login.forgotPasswordDesc}</p>
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -153,20 +175,33 @@ export default function LoginPage() {
               required
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {t.login.password}
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={t.login.passwordPlaceholder}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
-              required
-              minLength={6}
-            />
-          </div>
+          {mode !== "forgot" && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-gray-700">
+                  {t.login.password}
+                </label>
+                {mode === "login" && (
+                  <button
+                    type="button"
+                    onClick={() => switchMode("forgot")}
+                    className="text-xs text-orange-500 hover:text-orange-600 transition-colors"
+                  >
+                    {t.login.forgotPasswordLink}
+                  </button>
+                )}
+              </div>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={t.login.passwordPlaceholder}
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+                required
+                minLength={6}
+              />
+            </div>
+          )}
 
           {message && (
             <div
@@ -189,8 +224,20 @@ export default function LoginPage() {
               ? t.login.loading
               : mode === "login"
               ? t.login.submit_login
-              : t.login.submit_signup}
+              : mode === "signup"
+              ? t.login.submit_signup
+              : t.login.sendResetEmail}
           </button>
+
+          {mode === "forgot" && (
+            <button
+              type="button"
+              onClick={() => switchMode("login")}
+              className="w-full text-sm text-gray-500 hover:text-gray-700 transition-colors py-1"
+            >
+              ← {t.login.backToLogin}
+            </button>
+          )}
         </form>
       </div>
     </div>
