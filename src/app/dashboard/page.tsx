@@ -1,50 +1,7 @@
-import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import DashboardClient from "@/components/dashboard/DashboardClient";
 
-// Always server-render: page calls createServerClient() which needs cookies & Supabase env vars
-export const dynamic = "force-dynamic";
-
-export default async function DashboardPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
-
-  const { count: restaurantCount } = await supabase
-    .from("restaurants")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", user.id);
-
-  const { count: visitedCount } = await supabase
-    .from("restaurants")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .eq("is_visited", true);
-
-  const { count: wishlistCount } = await supabase
-    .from("restaurants")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .eq("is_wishlist", true);
-
-  const displayName =
-    profile?.display_name || user.email?.split("@")[0] || "美食家";
-
-  return (
-    <DashboardClient
-      displayName={displayName}
-      restaurantCount={restaurantCount ?? 0}
-      visitedCount={visitedCount ?? 0}
-      wishlistCount={wishlistCount ?? 0}
-    />
-  );
+// Dashboard has been merged into the map page.
+// Keep this file so old /dashboard bookmarks redirect gracefully.
+export default function DashboardPage() {
+  redirect("/map");
 }

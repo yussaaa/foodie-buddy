@@ -2,18 +2,71 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useLanguage } from "@/lib/i18n/LanguageContext";
+import type { Restaurant } from "@/types";
+
+// ── 迷你统计 widget（仅桌面侧边栏） ──────────────────────────
+function SidebarStats({ language }: { language: "zh" | "en" }) {
+  const [counts, setCounts] = useState<{ all: number; visited: number; wishlist: number } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/restaurants")
+      .then((r) => r.json())
+      .then((data: Restaurant[]) =>
+        setCounts({
+          all: data.length,
+          visited: data.filter((r) => r.is_visited).length,
+          wishlist: data.filter((r) => !r.is_visited).length,
+        })
+      )
+      .catch(() => {});
+  }, []);
+
+  const n = (v?: number) => (v != null ? String(v) : "—");
+
+  const stats = [
+    { emoji: "📍", value: n(counts?.all),     label: language === "zh" ? "地点" : "Places",  bg: "bg-orange-50" },
+    { emoji: "✅", value: n(counts?.visited),  label: language === "zh" ? "已探访" : "Visited", bg: "bg-green-50"  },
+    { emoji: "🌟", value: n(counts?.wishlist), label: language === "zh" ? "心愿单" : "Wishlist", bg: "bg-yellow-50" },
+  ];
+
+  return (
+    <div className="px-4 py-3 border-b border-gray-100">
+      <div className="grid grid-cols-3 gap-2">
+        {stats.map(({ emoji, value, label, bg }) => (
+          <div key={label} className={`flex flex-col items-center ${bg} rounded-xl py-2.5 gap-0.5`}>
+            <span className="text-base leading-none">{emoji}</span>
+            <span className="text-lg font-bold text-gray-800 leading-tight">{value}</span>
+            <span className="text-[10px] text-gray-400 font-medium">{label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { t, language, setLanguage } = useLanguage();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
+
+  // 点击设置面板外部自动关闭
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+        setSettingsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [settingsOpen]);
 
   const navItems = [
-    { href: "/dashboard", icon: "🏠", label: t.nav.home },
     { href: "/map", icon: "🗺️", label: t.nav.map },
     { href: "/explore", icon: "🔍", label: t.nav.explore },
     { href: "/nutrition", icon: "🥗", label: t.nav.nutrition, comingSoon: true },
@@ -45,6 +98,9 @@ export default function Sidebar() {
             </div>
           </div>
         </div>
+
+        {/* Mini stats */}
+        <SidebarStats language={language} />
 
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-1">
@@ -87,7 +143,7 @@ export default function Sidebar() {
         {/* Bottom: Settings gear + Logout */}
         <div className="p-4 border-t border-gray-100 space-y-1">
           {/* Settings button */}
-          <div className="relative">
+          <div className="relative" ref={settingsRef}>
             <button
               onClick={() => setSettingsOpen((v) => !v)}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-all"
@@ -154,27 +210,12 @@ export default function Sidebar() {
       </aside>
 
       {/* ── Mobile Bottom Navigation Bar ────────────────────────── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur border-t border-gray-100 safe-area-pb">
+      {/* Hidden on /map — replaced by the Google Maps-style MobileBottomBar */}
+      <nav className={`md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur border-t border-gray-100 safe-area-pb${pathname === "/map" ? " hidden" : ""}`}>
         <div className="flex items-center px-1 py-1">
-          {navItems.map((item) => {
+          {navItems.filter((item) => !item.comingSoon).map((item) => {
             const isActive =
               pathname === item.href || pathname.startsWith(item.href + "/");
-
-            if (item.comingSoon) {
-              return (
-                <div
-                  key={item.href}
-                  className="flex-1 flex flex-col items-center justify-center min-w-0 cursor-not-allowed"
-                >
-                  <span className="flex flex-col items-center gap-0.5 w-full rounded-xl py-1.5 px-1 opacity-30">
-                    <span className="text-[22px] leading-none">{item.icon}</span>
-                    <span className="text-[9px] font-semibold w-full text-center truncate text-gray-400">
-                      {item.label}
-                    </span>
-                  </span>
-                </div>
-              );
-            }
 
             return (
               <Link
@@ -209,7 +250,7 @@ export default function Sidebar() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
               <span className="text-[9px] font-bold text-orange-500">
-                {language === "zh" ? "EN" : "中"}
+                {language === "zh" ? "设置" : "Setting"}
               </span>
             </span>
           </button>

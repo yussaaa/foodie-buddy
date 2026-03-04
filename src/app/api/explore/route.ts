@@ -14,7 +14,9 @@ export interface ExploreResponse {
     google_place_id: string | null;
     rating: number | null;
     reviews: PlaceReview[];
-    photoNames: string[];  // Google Places photo resource names
+    photoNames: string[];           // Google Places photo resource names
+    openingHours?: string[] | null; // Real hours from Google Places (weekdayDescriptions)
+    website?: string | null;        // Restaurant's own website from Google Places
   };
   ai: AIRestaurantInfo;
   fromCache?: boolean;       // true if result was served from DB cache
@@ -67,7 +69,7 @@ export async function POST(request: NextRequest) {
 
           if (cached && cached.ai_content) {
             // Return cached result — skip OpenAI call
-            // Reviews + photos come from the just-completed searchPlace call (always fresh)
+            // Reviews + photos + hours come from the just-completed searchPlace call (always fresh)
             return NextResponse.json({
               restaurant: {
                 name: cached.name,
@@ -79,6 +81,8 @@ export async function POST(request: NextRequest) {
                 rating: cached.rating ? Number(cached.rating) : null,
                 reviews: place?.reviews ?? [],
                 photoNames: place?.photoNames ?? [],
+                openingHours: place?.openingHours ?? null,
+                website: place?.website ?? null,
               },
               ai: cached.ai_content as AIRestaurantInfo,
               fromCache: true,
@@ -117,6 +121,8 @@ export async function POST(request: NextRequest) {
         rating: place?.rating ?? null,
         reviews: place?.reviews ?? [],
         photoNames: place?.photoNames ?? [],
+        openingHours: place?.openingHours ?? null,
+        website: place?.website ?? null,
       },
       ai,
     };

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLanguage } from "@/lib/i18n/LanguageContext";
 import { ExploreResponse } from "@/app/api/explore/route";
+import { ReviewMention } from "@/app/api/analyze-reviews/route";
 
 // ─── Recent Searches ───────────────────────────────────────────────────────
 
@@ -249,7 +250,7 @@ export default function ExplorePage() {
   const [detailForm, setDetailForm] = useState({
     is_visited: false,
     user_rating: 0,
-    visited_at: "",
+    visited_at: new Date().toISOString().split("T")[0], // default to today
     want_to_revisit: null as boolean | null,
   });
 
@@ -259,6 +260,10 @@ export default function ExplorePage() {
   const [dishPhotosLoaded, setDishPhotosLoaded] = useState(false);
   // Debug: force a specific photo provider (null = auto cascade)
   const [photoProvider, setPhotoProvider] = useState<string | null>(null);
+
+  // Review food-mention analysis — loaded lazily when user opens Reviews tab
+  const [reviewMentions, setReviewMentions] = useState<ReviewMention[][] | null>(null);
+  const [reviewMentionsLoading, setReviewMentionsLoading] = useState(false);
 
   const lastInputRef = useRef("");
 
@@ -309,6 +314,35 @@ export default function ExplorePage() {
     });
   }, [activeTab, result, dishPhotosLoaded, dishPhotosLoading, photoProvider]);
 
+  // ── Review food-mention lazy analysis ────────────────────────────────────
+  // Fires when user opens Reviews tab. Extracts dish names + sentiment from
+  // each review using GPT-4o-mini. Resets when a new restaurant is searched.
+  useEffect(() => {
+    const reviews = result?.restaurant.reviews;
+    if (
+      activeTab !== "reviews" ||
+      !reviews?.length ||
+      reviewMentions !== null ||
+      reviewMentionsLoading
+    )
+      return;
+
+    setReviewMentionsLoading(true);
+    fetch("/api/analyze-reviews", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reviews: reviews.map((r) => r.text), language }),
+    })
+      .then((r) => r.json())
+      .then((data: { mentions: ReviewMention[][] }) => {
+        setReviewMentions(data.mentions ?? null);
+      })
+      .catch(() => {
+        // Soft fail — mentions simply won't show
+      })
+      .finally(() => setReviewMentionsLoading(false));
+  }, [activeTab, result, reviewMentions, reviewMentionsLoading, language]);
+
   // ── Core fetch function ───────────────────────────────────────────────────
   const runExplore = useCallback(
     async (
@@ -320,11 +354,13 @@ export default function ExplorePage() {
       setSaved(false);
       setActiveTab("intro");
       setShowDropdown(false);
-      // Reset detail section + dish photo state for new search
+      // Reset detail section, dish photo, and review-mention state for new search
       setSavedRestaurantId(null);
       setDishPhotos([]);
       setDishPhotosLoading(false);
       setDishPhotosLoaded(false);
+      setReviewMentions(null);
+      setReviewMentionsLoading(false);
       setIsEditingDetails(false);
       setDetailsSaved(false);
       setDetailForm({ is_visited: false, user_rating: 0, visited_at: "", want_to_revisit: null });
@@ -619,8 +655,8 @@ export default function ExplorePage() {
                 disabled={loading}
               />
 
-              {/* Recent Searches Dropdown — hidden on lg+ where sidebar shows */}
-              {showDropdown && recentSearches.length > 0 && (
+              {/* Recent Searches Dropdown — only when a result is already showing (re-search from history), hidden on lg+ */}
+              {showDropdown && recentSearches.length > 0 && !!result && (
                 <div className="lg:hidden absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-20">
                   {/* Dropdown header */}
                   <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
@@ -685,6 +721,52 @@ export default function ExplorePage() {
             </button>
           </div>
 
+          {/* Mobile Persistent Recent Searches — always visible below search, hidden on lg+ (sidebar handles it there) */}
+          {!result && !loading && recentSearches.length > 0 && (
+            <div className="lg:hidden mb-6 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
+                <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                  {t.explore.recentSearches}
+                </span>
+                <button
+                  onClick={handleClearRecent}
+                  className="text-[11px] text-gray-400 hover:text-red-400 transition-colors"
+                >
+                  {t.explore.clearAll}
+                </button>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {recentSearches.map((search, i) => (
+                  <div key={i} className="flex items-center group hover:bg-orange-50 active:bg-orange-100 transition-colors">
+                    <button
+                      onClick={() => handleRecentClick(search)}
+                      className="flex-1 text-left px-4 py-3 flex items-center gap-3 min-w-0"
+                    >
+                      <span className="text-gray-300 flex-shrink-0">🕐</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-700 truncate group-hover:text-orange-600 transition-colors">
+                          {search.name}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {(language === "zh" ? search.cuisine_type_zh : search.cuisine_type_en) ?? search.cuisine_type}
+                        </p>
+                      </div>
+                    </button>
+                    <button
+                      onClick={(e) => handleRemoveRecent(e, i)}
+                      className="px-3 py-3 text-gray-300 hover:text-red-400 transition-colors flex-shrink-0"
+                      title="删除"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Error */}
           {error && (
             <div className="bg-red-50 text-red-600 rounded-2xl px-4 py-3 text-sm mb-5">
@@ -747,6 +829,100 @@ export default function ExplorePage() {
                           {result.restaurant.rating} / 5
                         </p>
                       )}
+
+                      {/* ── Quick Links row ── */}
+                      {(() => {
+                        const placeId = result.restaurant.google_place_id;
+                        const rLat  = result.restaurant.lat;
+                        const rLng  = result.restaurant.lng;
+                        const rName = result.restaurant.name;
+                        const rAddr = result.restaurant.address ?? "";
+
+                        // Google Maps requires both `destination` (text) AND `destination_place_id`
+                        // when using a place ID — supplying place_id alone leaves destination blank.
+                        const destText = encodeURIComponent(rName + (rAddr ? ` ${rAddr}` : ""));
+                        const destCoords = rLat && rLng ? `${rLat},${rLng}` : null;
+
+                        const buildDirUrl = (origin?: string) => {
+                          const base = "https://www.google.com/maps/dir/?api=1";
+                          const originPart = origin ? `&origin=${origin}` : "";
+                          if (placeId) {
+                            // destination text is required alongside place_id
+                            return `${base}${originPart}&destination=${destText}&destination_place_id=${placeId}`;
+                          }
+                          if (destCoords) {
+                            return `${base}${originPart}&destination=${destCoords}`;
+                          }
+                          return `${base}${originPart}&destination=${destText}`;
+                        };
+
+                        const dirFallback = buildDirUrl();
+
+                        // Click handler: tries geolocation → pre-fills origin in URL
+                        const handleDirections = (e: React.MouseEvent<HTMLAnchorElement>) => {
+                          e.preventDefault();
+                          const open = (url: string) =>
+                            window.open(url, "_blank", "noopener,noreferrer");
+
+                          if (!navigator?.geolocation) {
+                            open(dirFallback);
+                            return;
+                          }
+                          navigator.geolocation.getCurrentPosition(
+                            ({ coords }) => {
+                              const origin = `${coords.latitude},${coords.longitude}`;
+                              open(buildDirUrl(origin));
+                            },
+                            () => open(dirFallback), // permission denied / unavailable
+                            { timeout: 5000, maximumAge: 60000 }
+                          );
+                        };
+
+                        const googleMapsUrl = placeId
+                          ? `https://www.google.com/maps/place/?q=place_id:${placeId}`
+                          : `https://www.google.com/maps/search/?q=${encodeURIComponent(rName + " " + rAddr)}`;
+
+                        const yelpUrl = `https://www.yelp.com/search?find_desc=${encodeURIComponent(rName)}&find_loc=${encodeURIComponent(rAddr || rName)}`;
+
+                        const regularLinks: { icon: string; label: string; url: string | null }[] = [
+                          { icon: "📍", label: t.explore.googleMapsLink, url: googleMapsUrl },
+                          { icon: "🌐", label: t.explore.websiteLink,    url: result.restaurant.website ?? null },
+                          { icon: "🍽️", label: t.explore.yelpLink,       url: yelpUrl },
+                        ];
+
+                        const linkCls = "inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-gray-200 text-xs text-gray-600 hover:border-orange-300 hover:text-orange-600 hover:bg-orange-50 transition-all";
+
+                        return (
+                          <div className="flex flex-wrap gap-1.5 mt-2.5">
+                            {/* Directions — geolocation-enhanced */}
+                            <a
+                              href={dirFallback}
+                              onClick={handleDirections}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={linkCls}
+                            >
+                              <span className="text-sm leading-none">🗺️</span>
+                              <span>{t.explore.directionsLink}</span>
+                            </a>
+                            {/* Regular links */}
+                            {regularLinks.map(({ icon, label, url }) =>
+                              url ? (
+                                <a
+                                  key={label}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={linkCls}
+                                >
+                                  <span className="text-sm leading-none">{icon}</span>
+                                  <span>{label}</span>
+                                </a>
+                              ) : null
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Save Button */}
@@ -804,25 +980,62 @@ export default function ExplorePage() {
                             {t.explore.restaurantSpotlight}
                           </h4>
                           <div className="divide-y divide-orange-100">
-                            {(
-                              [
-                                { icon: "📍", label: t.explore.neighborhood, value: result.ai.restaurant_spotlight.neighborhood },
-                                { icon: "🕐", label: t.explore.hours,        value: result.ai.restaurant_spotlight.hours },
-                                { icon: "🅿️",  label: t.explore.parking,      value: result.ai.restaurant_spotlight.parking },
-                              ] as { icon: string; label: string; value: string }[]
-                            ).map(({ icon, label, value }) => (
-                              <div key={label} className="flex gap-3 px-4 py-2.5 text-sm">
-                                <span className="text-base leading-snug flex-shrink-0">{icon}</span>
-                                <div className="min-w-0">
-                                  <span className="font-medium text-gray-700">{label}</span>
-                                  <p className="text-gray-600 text-xs mt-0.5 leading-relaxed">{value}</p>
-                                </div>
+                            {/* Neighborhood */}
+                            <div className="flex gap-3 px-4 py-2.5 text-sm">
+                              <span className="text-base leading-snug flex-shrink-0">📍</span>
+                              <div className="min-w-0">
+                                <span className="font-medium text-gray-700">{t.explore.neighborhood}</span>
+                                <p className="text-gray-600 text-xs mt-0.5 leading-relaxed">
+                                  {result.ai.restaurant_spotlight.neighborhood}
+                                </p>
                               </div>
-                            ))}
+                            </div>
+
+                            {/* Hours — real Google data when available, AI fallback otherwise */}
+                            <div className="flex gap-3 px-4 py-2.5 text-sm">
+                              <span className="text-base leading-snug flex-shrink-0">🕐</span>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-medium text-gray-700">{t.explore.hours}</span>
+                                  {result.restaurant.openingHours ? (
+                                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-600">
+                                      ✓ {t.explore.hoursFromGoogle}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                {result.restaurant.openingHours ? (
+                                  <ul className="mt-1 space-y-0.5">
+                                    {result.restaurant.openingHours.map((line, idx) => (
+                                      <li key={idx} className="text-gray-600 text-xs leading-relaxed">
+                                        {line}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <p className="text-gray-600 text-xs mt-0.5 leading-relaxed">
+                                    {result.ai.restaurant_spotlight.hours}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Parking */}
+                            <div className="flex gap-3 px-4 py-2.5 text-sm">
+                              <span className="text-base leading-snug flex-shrink-0">🅿️</span>
+                              <div className="min-w-0">
+                                <span className="font-medium text-gray-700">{t.explore.parking}</span>
+                                <p className="text-gray-600 text-xs mt-0.5 leading-relaxed">
+                                  {result.ai.restaurant_spotlight.parking}
+                                </p>
+                              </div>
+                            </div>
                           </div>
-                          <p className="px-4 py-2 text-[11px] text-gray-400 text-right border-t border-orange-100">
-                            ⚠ {t.explore.aiEstimate}
-                          </p>
+                          {/* Footer: show AI-estimate notice only when hours are AI-generated */}
+                          {!result.restaurant.openingHours && (
+                            <p className="px-4 py-2 text-[11px] text-gray-400 text-right border-t border-orange-100">
+                              ⚠ {t.explore.aiEstimate}
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -885,6 +1098,28 @@ export default function ExplorePage() {
                               </span>
                             ))}
                           </div>
+                        </div>
+                      )}
+
+                      {/* ── Cuisine Classics — iconic dishes of this CUISINE TYPE (not restaurant-specific) ── */}
+                      {(result.ai.cuisine_classic_dishes?.length ?? 0) > 0 && (
+                        <div className="border-t border-gray-100 pt-4">
+                          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2.5">
+                            🍽️ {t.explore.cuisineClassics}
+                          </h4>
+                          <div className="flex flex-wrap gap-2">
+                            {result.ai.cuisine_classic_dishes!.map((dish) => (
+                              <span
+                                key={dish}
+                                className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-full text-xs font-medium"
+                              >
+                                {dish}
+                              </span>
+                            ))}
+                          </div>
+                          <p className="text-[11px] text-gray-400 mt-2">
+                            {t.explore.cuisineClassicsHint}
+                          </p>
                         </div>
                       )}
                     </div>
@@ -1039,31 +1274,67 @@ export default function ExplorePage() {
                         </p>
                       ) : (
                         <>
-                          {result.restaurant.reviews.map((review, i) => (
-                            <div key={i} className="border border-gray-100 rounded-xl p-4">
-                              <div className="flex items-start justify-between gap-2 mb-2">
-                                <span className="font-medium text-gray-800 text-sm leading-tight">
-                                  {review.authorName}
-                                </span>
-                                <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                                  <div className="flex gap-0.5">
-                                    {[1, 2, 3, 4, 5].map((s) => (
-                                      <span
-                                        key={s}
-                                        className={`text-xs ${s <= review.rating ? "text-orange-400" : "text-gray-200"}`}
-                                      >
-                                        ★
-                                      </span>
-                                    ))}
+                          {result.restaurant.reviews.map((review, i) => {
+                            const mentions = reviewMentions?.[i] ?? [];
+                            const isAnalyzing = reviewMentionsLoading && reviewMentions === null;
+
+                            return (
+                              <div key={i} className="border border-gray-100 rounded-xl p-4">
+                                <div className="flex items-start justify-between gap-2 mb-2">
+                                  <span className="font-medium text-gray-800 text-sm leading-tight">
+                                    {review.authorName}
+                                  </span>
+                                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                                    <div className="flex gap-0.5">
+                                      {[1, 2, 3, 4, 5].map((s) => (
+                                        <span
+                                          key={s}
+                                          className={`text-xs ${s <= review.rating ? "text-orange-400" : "text-gray-200"}`}
+                                        >
+                                          ★
+                                        </span>
+                                      ))}
+                                    </div>
+                                    {review.relativeTime && (
+                                      <span className="text-xs text-gray-400">{review.relativeTime}</span>
+                                    )}
                                   </div>
-                                  {review.relativeTime && (
-                                    <span className="text-xs text-gray-400">{review.relativeTime}</span>
-                                  )}
                                 </div>
+                                <p className="text-sm text-gray-600 leading-relaxed">{review.text}</p>
+
+                                {/* ── Food mentions analysis ── */}
+                                {isAnalyzing && (
+                                  <div className="mt-3 pt-3 border-t border-gray-50 flex gap-2">
+                                    <div className="h-6 w-16 bg-gray-100 rounded-full animate-pulse" />
+                                    <div className="h-6 w-20 bg-gray-100 rounded-full animate-pulse" />
+                                    <div className="h-6 w-14 bg-gray-100 rounded-full animate-pulse" />
+                                  </div>
+                                )}
+                                {!isAnalyzing && mentions.length > 0 && (
+                                  <div className="mt-3 pt-3 border-t border-gray-50">
+                                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                                      {t.explore.reviewFoodMentions}
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {mentions.map((mention, mi) => (
+                                        <span
+                                          key={mi}
+                                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
+                                            mention.sentiment === "recommend"
+                                              ? "bg-green-100 text-green-700"
+                                              : "bg-red-100 text-red-600"
+                                          }`}
+                                        >
+                                          {mention.sentiment === "recommend" ? "👍" : "👎"}
+                                          {mention.food}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
-                              <p className="text-sm text-gray-600 leading-relaxed">{review.text}</p>
-                            </div>
-                          ))}
+                            );
+                          })}
                           <p className="text-xs text-gray-400 text-right pt-1">
                             {t.explore.reviewsSource}
                           </p>

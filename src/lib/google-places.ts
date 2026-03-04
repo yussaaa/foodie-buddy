@@ -15,7 +15,9 @@ export interface PlaceResult {
   types: string[];
   rating: number | null;
   reviews: PlaceReview[];
-  photoNames: string[];  // Google Places photo resource names (up to 5)
+  photoNames: string[];        // Google Places photo resource names (up to 5)
+  openingHours?: string[] | null; // weekdayDescriptions from regularOpeningHours
+  website?: string | null;    // restaurant's own website (websiteUri from Places API)
 }
 
 /**
@@ -94,7 +96,7 @@ export async function searchPlace(query: string): Promise<PlaceResult | null> {
           "Content-Type": "application/json",
           "X-Goog-Api-Key": apiKey,
           "X-Goog-FieldMask":
-            "places.id,places.displayName,places.formattedAddress,places.location,places.types,places.rating,places.reviews,places.photos",
+            "places.id,places.displayName,places.formattedAddress,places.location,places.types,places.rating,places.reviews,places.photos,places.regularOpeningHours,places.websiteUri",
         },
         body: JSON.stringify({ textQuery: query }),
         signal: AbortSignal.timeout(8000),
@@ -133,6 +135,11 @@ export async function searchPlace(query: string): Promise<PlaceResult | null> {
       .map((p: { name?: string }) => p.name ?? "")
       .filter(Boolean);
 
+    // Extract real opening hours (weekdayDescriptions has 7 strings, one per day)
+    const rawHours = place.regularOpeningHours ?? place.currentOpeningHours;
+    const openingHours: string[] | null =
+      (rawHours?.weekdayDescriptions as string[] | undefined) ?? null;
+
     return {
       placeId: place.id ?? null,
       name: place.displayName?.text ?? query,
@@ -143,6 +150,8 @@ export async function searchPlace(query: string): Promise<PlaceResult | null> {
       rating: place.rating ?? null,
       reviews,
       photoNames,
+      openingHours,
+      website: (place.websiteUri as string | undefined) ?? null,
     };
   } catch (err) {
     console.warn("[Google Places] Fetch failed:", err);

@@ -9,17 +9,27 @@ Usage:
   python scripts/update_prompts.py --dry-run    # preview changes, no writes
 
 Credentials:
-  Dev  → .env.local          (NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY)
-  Prod → .env.prod.local     (same variable names — create this file manually, never commit it)
+  Dev  → .env.local       (NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY)
+  Prod → .env.prod.local  (same variable names — create this file manually, never commit it)
+
+Note: uses the anon key. Requires the ai_prompts table to have an RLS write policy
+(see supabase/schema.sql — "Public write ai_prompts").
 """
 
 import argparse
 import json
 import os
+import ssl
 import sys
 import urllib.request
 import urllib.error
 from pathlib import Path
+
+try:
+    import certifi
+    _SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    _SSL_CONTEXT = None  # fall back to system certs
 
 # ── Repo root (one level up from this script) ─────────────────────────────────
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -35,10 +45,9 @@ PROD_ENV_INSTRUCTIONS = """
 
   # .env.prod.local — Production Supabase credentials — DO NOT COMMIT
   NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROD_PROJECT.supabase.co
-  SUPABASE_SERVICE_ROLE_KEY=your-prod-service-role-key
+  NEXT_PUBLIC_SUPABASE_ANON_KEY=your-prod-anon-key
 
-  You can find these in the GCP Cloud Run Console → the service's environment variables,
-  or in the Supabase dashboard → Project Settings → API.
+  You can find these in the Supabase dashboard → Project Settings → API.
 """
 
 
@@ -72,7 +81,7 @@ Restaurant details:
 - Rating: {{rating}}
 
 Please provide a comprehensive guide in {{lang}}.
-IMPORTANT: The "signature_dishes" array must include between 5 and 10 of the most iconic and representative dishes of this cuisine type. Do not return fewer than 5 dishes.
+IMPORTANT: The "signature_dishes" array must include 5–12 dishes that are SPECIFICALLY LIKELY TO BE ON THIS RESTAURANT'S ACTUAL MENU. Infer from the restaurant's name, cuisine style, price tier (from rating), neighborhood, and cuisine type. These are NOT generic cuisine-type classics — they are dishes a customer would actually order at this specific restaurant. Do not return fewer than 5 dishes.
 Respond with ONLY a JSON object (no markdown, no code blocks) with these exact fields:
 
 {
@@ -94,17 +103,19 @@ Respond with ONLY a JSON object (no markdown, no code blocks) with these exact f
 
   "food_pairings": ["Up to 5 drinks, sides, or accompaniments that pair well with this cuisine, e.g. 'Jasmine tea', 'Cold beer', 'Steamed rice'"],
 
+  "cuisine_classic_dishes": ["6-10 iconic dishes that define this CUISINE TYPE as a whole — not specific to this restaurant. These are the dishes anyone studying this cuisine would recognise. Examples: for Italian -> 'Pizza Margherita', 'Spaghetti Carbonara'; for Sichuan -> '宫保鸡丁', '麻婆豆腐'; for Japanese -> 'Ramen', 'Sushi'. Use display language {{lang}}. Return dish names only (strings), no descriptions."],
+
   "signature_dishes": [
     {
-      "name": "Dish name in {{lang}} (for display)",
-      "search_name": "Dish name in its ORIGINAL menu language, e.g. English for Western/Japanese/Italian restaurants, Chinese for Chinese restaurants — used for image search only",
-      "description": "50-70 word overview of this dish's taste profile, texture, and cultural significance",
+      "name": "Dish name as it would appear on this restaurant's menu, in {{lang}} for display",
+      "search_name": "Dish name in its ORIGINAL menu language (e.g. English for Western/Japanese/Italian restaurants, Chinese for Chinese restaurants) — used for image search only",
+      "description": "50-70 word description of this dish as served at this restaurant — taste profile, texture, and what makes it worth ordering here",
       "key_ingredients": ["Up to 5 main ingredients in this dish, e.g. 'Wagyu beef', 'Ponzu sauce'"],
       "cooking_method": "1 sentence describing the primary cooking technique, e.g. 'Slow-braised for 6 hours in aromatic broth until fall-apart tender.'",
       "how_to_eat": "1-2 sentences on the best way to enjoy this dish — dipping sauces, correct utensils, ideal order of eating, or what to pair it with at the table.",
       "price_range": "Estimated price at this specific restaurant, inferred from its rating and cuisine type. Use local currency symbol. E.g. '$18-28' or '¥68-98'. Append '(estimate)' or '(参考价格)'."
     },
-    "... include 5–10 dishes total using the same structure above ..."
+    "... include 5–12 dishes total using the same structure above ..."
   ],
 
   "nutrition_highlights": "2 paragraphs summarizing the typical nutritional characteristics of this cuisine. Include macronutrients, common ingredients, and general health impact.",
@@ -132,7 +143,7 @@ def parse_env_file(path: Path) -> dict[str, str]:
 
 
 def load_credentials(env_name: str) -> tuple[str, str]:
-    """Return (supabase_url, service_role_key) for the given env."""
+    """Return (supabase_url, anon_key) for the given env."""
     env_file = ENV_FILES[env_name]
     if not env_file.exists():
         if env_name == "prod":
@@ -145,14 +156,14 @@ def load_credentials(env_name: str) -> tuple[str, str]:
 
     env = parse_env_file(env_file)
     url = env.get("NEXT_PUBLIC_SUPABASE_URL", "").rstrip("/")
-    key = env.get("SUPABASE_SERVICE_ROLE_KEY", "")
+    key = env.get("NEXT_PUBLIC_SUPABASE_ANON_KEY", "")
 
     if not url or not key:
         missing = []
         if not url:
             missing.append("NEXT_PUBLIC_SUPABASE_URL")
         if not key:
-            missing.append("SUPABASE_SERVICE_ROLE_KEY")
+            missing.append("NEXT_PUBLIC_SUPABASE_ANON_KEY")
         print(f"\n❌  Error: Missing variables in {env_file}: {', '.join(missing)}")
         sys.exit(1)
 
@@ -176,7 +187,7 @@ def upsert_prompt(url: str, key: str, prompt: dict, env_label: str, dry_run: boo
             print(f"  extra fields: {extra_fields}")
         return True
 
-    endpoint = f"{url}/rest/v1/ai_prompts"
+    endpoint = f"{url}/rest/v1/ai_prompts?on_conflict=key"
     body = json.dumps(prompt).encode("utf-8")
     req = urllib.request.Request(
         endpoint,
@@ -191,7 +202,7 @@ def upsert_prompt(url: str, key: str, prompt: dict, env_label: str, dry_run: boo
     )
 
     try:
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, context=_SSL_CONTEXT) as resp:
             status = resp.status
             if status in (200, 201):
                 print(f"  ✅  {prompt_key} ({env_label})")

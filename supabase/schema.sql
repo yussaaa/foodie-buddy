@@ -245,11 +245,14 @@ create table if not exists public.ai_prompts (
   updated_at   timestamptz not null default now()
 );
 
--- 允许未登录服务端代码读取（anon key）
+-- anon key 可读写（用于 update_prompts.py 脚本热更新，ai_prompts 不含用户数据）
 alter table public.ai_prompts enable row level security;
 
 create policy "Public read ai_prompts" on public.ai_prompts
   for select using (true);
+
+create policy "Public write ai_prompts" on public.ai_prompts
+  for all using (true) with check (true);
 
 -- 自动更新 updated_at
 create trigger update_ai_prompts_updated_at before update on public.ai_prompts
@@ -291,7 +294,7 @@ values (
 - Rating: {{rating}}
 
 Please provide a comprehensive guide in {{lang}}.
-IMPORTANT: The "signature_dishes" array must include between 5 and 10 of the most iconic and representative dishes of this cuisine type. Do not return fewer than 5 dishes.
+IMPORTANT: The "signature_dishes" array must include 5–12 dishes that are SPECIFICALLY LIKELY TO BE ON THIS RESTAURANT'S ACTUAL MENU. Infer from the restaurant's name, cuisine style, price tier (from rating), neighborhood, and cuisine type. These are NOT generic cuisine-type classics — they are dishes a customer would actually order at this specific restaurant. Do not return fewer than 5 dishes.
 Respond with ONLY a JSON object (no markdown, no code blocks) with these exact fields:
 
 {
@@ -313,17 +316,19 @@ Respond with ONLY a JSON object (no markdown, no code blocks) with these exact f
 
   "food_pairings": ["Up to 5 drinks, sides, or accompaniments that pair well with this cuisine, e.g. 'Jasmine tea', 'Cold beer', 'Steamed rice'"],
 
+  "cuisine_classic_dishes": ["6-10 iconic dishes that define this CUISINE TYPE as a whole — not specific to this restaurant. These are the dishes anyone studying this cuisine would recognise. Examples: for Italian → 'Pizza Margherita', 'Spaghetti Carbonara'; for Sichuan → '宫保鸡丁', '麻婆豆腐'; for Japanese → 'Ramen', 'Sushi'. Use display language {{lang}}. Return dish names only (strings), no descriptions."],
+
   "signature_dishes": [
     {
-      "name": "Dish name in {{lang}} (for display)",
-      "search_name": "Dish name in its ORIGINAL menu language, e.g. English for Western/Japanese/Italian restaurants, Chinese for Chinese restaurants — used for image search only",
-      "description": "50-70 word overview of this dish's taste profile, texture, and cultural significance",
+      "name": "Dish name as it would appear on this restaurant's menu, in {{lang}} for display",
+      "search_name": "Dish name in its ORIGINAL menu language (e.g. English for Western/Japanese/Italian restaurants, Chinese for Chinese restaurants) — used for image search only",
+      "description": "50-70 word description of this dish as served at this restaurant — taste profile, texture, and what makes it worth ordering here",
       "key_ingredients": ["Up to 5 main ingredients in this dish, e.g. 'Wagyu beef', 'Ponzu sauce'"],
       "cooking_method": "1 sentence describing the primary cooking technique, e.g. 'Slow-braised for 6 hours in aromatic broth until fall-apart tender.'",
       "how_to_eat": "1-2 sentences on the best way to enjoy this dish — dipping sauces, correct utensils, ideal order of eating, or what to pair it with at the table.",
       "price_range": "Estimated price at this specific restaurant, inferred from its rating and cuisine type. Use local currency symbol. E.g. '$18-28' or '¥68-98'. Append '(estimate)' or '(参考价格)'."
     },
-    "... include 5–10 dishes total using the same structure above ..."
+    "... include 5–12 dishes total using the same structure above ..."
   ],
 
   "nutrition_highlights": "2 paragraphs summarizing the typical nutritional characteristics of this cuisine. Include macronutrients, common ingredients, and general health impact.",

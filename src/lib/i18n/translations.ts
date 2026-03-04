@@ -115,6 +115,18 @@ const zh = {
     cookingMethod: "烹饪方式",
     howToEat: "怎么吃",
     priceRange: "参考价格",
+    // ── History tab — cuisine classics section ──────────────────────────────
+    cuisineClassics: "经典菜品",
+    cuisineClassicsHint: "该菜系的代表性菜肴，并不一定出现在这家餐厅的菜单上",
+    // ── Reviews tab — food mentions ─────────────────────────────────────────
+    reviewFoodMentions: "评论提及",
+    // ── Spotlight — real hours badge ────────────────────────────────────────
+    hoursFromGoogle: "来自 Google 地图",
+    // ── Quick links (below rating in result header) ──────────────────────────
+    directionsLink: "路线",
+    googleMapsLink: "Google 地图",
+    websiteLink: "官网",
+    yelpLink: "Yelp",
   },
   map: {
     title: "美食地图",
@@ -256,6 +268,18 @@ const en: TranslationSchema = {
     cookingMethod: "Cooking",
     howToEat: "How to Eat",
     priceRange: "Est. Price",
+    // ── History tab — cuisine classics section ──────────────────────────────
+    cuisineClassics: "Classic Dishes",
+    cuisineClassicsHint: "Iconic dishes of this cuisine type — may not appear on this restaurant's menu",
+    // ── Reviews tab — food mentions ─────────────────────────────────────────
+    reviewFoodMentions: "Food Mentions",
+    // ── Spotlight — real hours badge ────────────────────────────────────────
+    hoursFromGoogle: "From Google Maps",
+    // ── Quick links (below rating in result header) ──────────────────────────
+    directionsLink: "Directions",
+    googleMapsLink: "Google Maps",
+    websiteLink: "Website",
+    yelpLink: "Yelp",
   },
   map: {
     title: "Food Map",

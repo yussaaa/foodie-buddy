@@ -9,8 +9,8 @@ export default async function Home() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  // 已登录直接跳 dashboard
-  if (user) redirect("/dashboard");
+  // 已登录直接跳地图（主功能页）
+  if (user) redirect("/map");
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50 flex flex-col items-center justify-center p-8">

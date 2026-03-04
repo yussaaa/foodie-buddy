@@ -27,6 +27,7 @@ export interface AIRestaurantInfo {
   common_ingredients?: string[]; // up to 8 — defining ingredients of this cuisine
   common_spices?: string[];      // up to 6 — signature spices / sauces / condiments
   food_pairings?: string[];      // up to 5 — drinks, sides, accompaniments
+  cuisine_classic_dishes?: string[]; // 6-10 iconic dishes of this CUISINE TYPE (not restaurant-specific)
 
   // ── Signature Dishes tab ─────────────────────────────────────────────────────
   signature_dishes: Array<{
@@ -59,7 +60,7 @@ const FALLBACK_USER_TEMPLATE = `Restaurant details:
 - Rating: {{rating}}
 
 Please provide a comprehensive guide in {{lang}}.
-IMPORTANT: The "signature_dishes" array must include between 5 and 12 of the most iconic and representative dishes of this cuisine type. Do not return fewer than 5 dishes.
+IMPORTANT: The "signature_dishes" array must include 5–12 dishes that are SPECIFICALLY LIKELY TO BE ON THIS RESTAURANT'S ACTUAL MENU. Infer from the restaurant's name, cuisine style, price tier (from rating), neighborhood, and cuisine type. These are NOT generic cuisine-type classics — they are dishes a customer would actually order at this specific restaurant. Do not return fewer than 5 dishes.
 Respond with ONLY a JSON object (no markdown, no code blocks) with these exact fields:
 
 {
@@ -81,11 +82,13 @@ Respond with ONLY a JSON object (no markdown, no code blocks) with these exact f
 
   "food_pairings": ["Up to 5 drinks, sides, or accompaniments that pair well with this cuisine, e.g. 'Jasmine tea', 'Cold beer', 'Steamed rice'"],
 
+  "cuisine_classic_dishes": ["6-10 iconic dishes that define this CUISINE TYPE as a whole — not specific to this restaurant. These are the dishes anyone studying this cuisine would recognise. Examples: for Italian → 'Pizza Margherita', 'Spaghetti Carbonara'; for Sichuan → '宫保鸡丁', '麻婆豆腐'; for Japanese → 'Ramen', 'Sushi'. Use display language {{lang}}. Return dish names only (strings), no descriptions."],
+
   "signature_dishes": [
     {
-      "name": "Dish name in {{lang}} (for display)",
-      "search_name": "Dish name in its ORIGINAL menu language, e.g. English for Western/Japanese/Italian restaurants, Chinese for Chinese restaurants — used for image search only",
-      "description": "50-70 word overview of this dish's taste profile, texture, and cultural significance",
+      "name": "Dish name as it would appear on this restaurant's menu, in {{lang}} for display",
+      "search_name": "Dish name in its ORIGINAL menu language (e.g. English for Western/Japanese/Italian restaurants, Chinese for Chinese restaurants) — used for image search only",
+      "description": "50-70 word description of this dish as served at this restaurant — taste profile, texture, and what makes it worth ordering here",
       "key_ingredients": ["Up to 5 main ingredients in this dish, e.g. 'Wagyu beef', 'Ponzu sauce'"],
       "cooking_method": "1 sentence describing the primary cooking technique, e.g. 'Slow-braised for 6 hours in aromatic broth until fall-apart tender.'",
       "how_to_eat": "1-2 sentences on the best way to enjoy this dish — dipping sauces, correct utensils, ideal order of eating, or what to pair it with at the table.",
