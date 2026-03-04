@@ -25,10 +25,13 @@ yarn-error.log*
 
 # env files - NEVER commit these
 .env
+.env*.local
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+.env.prod.local
+mobile/.env
 
 # vercel
 .vercel
