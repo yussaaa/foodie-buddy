@@ -193,7 +193,7 @@ function patchRecentLangCuisine(
 
 // ─── Tab type ──────────────────────────────────────────────────────────────
 
-type Tab = "intro" | "history" | "dishes" | "nutrition" | "reviews";
+type Tab = "intro" | "history" | "dishes" | "reviews";
 
 // ─── StarRating ────────────────────────────────────────────────────────────
 
@@ -492,6 +492,15 @@ export default function ExplorePage() {
     setShowDropdown(false);
   };
 
+  const handleRemoveRecent = (e: React.MouseEvent, index: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const updated = recentSearches.filter((_, i) => i !== index);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    setRecentSearches(updated);
+    if (updated.length === 0) setShowDropdown(false);
+  };
+
   // ── Save restaurant ───────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!result) return;
@@ -568,7 +577,6 @@ export default function ExplorePage() {
     { key: "intro", label: t.explore.tabs.intro },
     { key: "history", label: t.explore.tabs.history },
     { key: "dishes", label: t.explore.tabs.dishes },
-    { key: "nutrition", label: t.explore.tabs.nutrition },
     ...(hasReviews ? [{ key: "reviews" as Tab, label: t.explore.tabs.reviews }] : []),
   ];
 
@@ -633,28 +641,35 @@ export default function ExplorePage() {
                   {/* Dropdown items */}
                   <div className="max-h-60 overflow-y-auto">
                     {recentSearches.map((search, i) => (
-                      <button
-                        key={i}
-                        onMouseDown={(e) => {
-                          e.preventDefault(); // prevent blur before click
-                          handleRecentClick(search);
-                        }}
-                        className="w-full text-left px-4 py-3 hover:bg-orange-50 active:bg-orange-100 transition-colors flex items-center gap-3 group"
-                      >
-                        <span className="text-gray-300 flex-shrink-0">🕐</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-700 truncate group-hover:text-orange-600 transition-colors">
-                            {search.name}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            {(language === "zh" ? search.cuisine_type_zh : search.cuisine_type_en) ?? search.cuisine_type}
-                          </p>
-                        </div>
-                        {/* Arrow hint */}
-                        <svg className="w-4 h-4 text-gray-300 flex-shrink-0 group-hover:text-orange-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </button>
+                      <div key={i} className="flex items-center group hover:bg-orange-50 active:bg-orange-100 transition-colors">
+                        <button
+                          onMouseDown={(e) => {
+                            e.preventDefault(); // prevent blur before click
+                            handleRecentClick(search);
+                          }}
+                          className="flex-1 text-left px-4 py-3 flex items-center gap-3 min-w-0"
+                        >
+                          <span className="text-gray-300 flex-shrink-0">🕐</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-700 truncate group-hover:text-orange-600 transition-colors">
+                              {search.name}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {(language === "zh" ? search.cuisine_type_zh : search.cuisine_type_en) ?? search.cuisine_type}
+                            </p>
+                          </div>
+                        </button>
+                        {/* Trash button */}
+                        <button
+                          onMouseDown={(e) => handleRemoveRecent(e, i)}
+                          className="px-3 py-3 text-gray-300 hover:text-red-400 transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
+                          title="删除"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -1013,26 +1028,8 @@ export default function ExplorePage() {
                       })}
                     </div>
                   )}
-                  {activeTab === "nutrition" && (
-                    <div className="space-y-5">
-                      <div>
-                        <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2 text-sm md:text-base">
-                          <span>🥗</span> {t.explore.nutritionNotes}
-                        </h4>
-                        <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">
-                          {result.ai.nutrition_highlights}
-                        </p>
-                      </div>
-                      <div className="border-t border-gray-100 pt-5">
-                        <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2 text-sm md:text-base">
-                          <span>⚠️</span> {t.explore.dietaryNotes}
-                        </h4>
-                        <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">
-                          {result.ai.dietary_notes}
-                        </p>
-                      </div>
-                    </div>
-                  )}
+                  {/* TODO: Move nutrition info (nutrition_highlights + dietary_notes) into
+                      Signature Dishes tab as a collapsible/expandable section per dish */}
 
                   {activeTab === "reviews" && (
                     <div className="space-y-3">
@@ -1292,18 +1289,29 @@ export default function ExplorePage() {
             ) : (
               <div className="divide-y divide-gray-50 max-h-[calc(100vh-200px)] overflow-y-auto">
                 {recentSearches.map((search, i) => (
-                  <button
-                    key={i}
-                    onClick={() => handleRecentClick(search)}
-                    className="w-full text-left px-4 py-3 hover:bg-orange-50 transition-colors group"
-                  >
-                    <p className="text-sm font-medium text-gray-700 truncate group-hover:text-orange-600 transition-colors">
-                      {search.name}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5 truncate">
-                      {(language === "zh" ? search.cuisine_type_zh : search.cuisine_type_en) ?? search.cuisine_type}
-                    </p>
-                  </button>
+                  <div key={i} className="flex items-center group hover:bg-orange-50 transition-colors">
+                    <button
+                      onClick={() => handleRecentClick(search)}
+                      className="flex-1 text-left px-4 py-3 min-w-0"
+                    >
+                      <p className="text-sm font-medium text-gray-700 truncate group-hover:text-orange-600 transition-colors">
+                        {search.name}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5 truncate">
+                        {(language === "zh" ? search.cuisine_type_zh : search.cuisine_type_en) ?? search.cuisine_type}
+                      </p>
+                    </button>
+                    {/* Trash button */}
+                    <button
+                      onClick={(e) => handleRemoveRecent(e, i)}
+                      className="px-3 py-3 text-gray-300 hover:text-red-400 transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
+                      title="删除"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
                 ))}
               </div>
             )}

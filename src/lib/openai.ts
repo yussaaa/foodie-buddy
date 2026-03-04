@@ -59,6 +59,7 @@ const FALLBACK_USER_TEMPLATE = `Restaurant details:
 - Rating: {{rating}}
 
 Please provide a comprehensive guide in {{lang}}.
+IMPORTANT: The "signature_dishes" array must include between 5 and 12 of the most iconic and representative dishes of this cuisine type. Do not return fewer than 5 dishes.
 Respond with ONLY a JSON object (no markdown, no code blocks) with these exact fields:
 
 {
@@ -89,7 +90,8 @@ Respond with ONLY a JSON object (no markdown, no code blocks) with these exact f
       "cooking_method": "1 sentence describing the primary cooking technique, e.g. 'Slow-braised for 6 hours in aromatic broth until fall-apart tender.'",
       "how_to_eat": "1-2 sentences on the best way to enjoy this dish — dipping sauces, correct utensils, ideal order of eating, or what to pair it with at the table.",
       "price_range": "Estimated price at this specific restaurant, inferred from its rating and cuisine type. Use local currency symbol. E.g. '$18-28' or '¥68-98'. Append '(estimate)' or '(参考价格)'."
-    }
+    },
+    "... include 5–12 dishes total using the same structure above ..."
   ],
 
   "nutrition_highlights": "2 paragraphs summarizing the typical nutritional characteristics of this cuisine. Include macronutrients, common ingredients, and general health impact.",
@@ -99,7 +101,7 @@ Respond with ONLY a JSON object (no markdown, no code blocks) with these exact f
 
 const FALLBACK_MODEL       = "gpt-4o-mini";
 const FALLBACK_TEMPERATURE = 0.7;
-const FALLBACK_MAX_TOKENS  = 2500;
+const FALLBACK_MAX_TOKENS  = 4000;
 
 // ── Main function ──────────────────────────────────────────────────────────────
 
