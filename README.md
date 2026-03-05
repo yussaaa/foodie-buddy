@@ -141,6 +141,8 @@ foodie-buddy/
 
 ## 🗺️ Roadmap
 
+- [ ] **Restaurant Recommendation Agent** — an AI-powered agent that provides personalized restaurant recommendations based on your culinary preferences, food mood, and dining context
+- [ ] **Smart cuisine & distance-based search** — find nearby restaurants filtered by cuisine type or distance radius, with smart sorting to surface trending spots and highly-rated dishes in your area
 - [ ] **User-configurable AI settings** — let users bring their own API key, choose a preferred model, and customize the AI prompt to tailor the experience to their tastes and dietary preferences
 - [ ] **Smarter menu intelligence** — improve the AI agent's ability to identify a restaurant's true signature dishes by pulling from richer, multi-source data (menus, reviews, photos, and more) rather than inference alone
 - [ ] **Social food maps** — share your restaurant map with friends, see where the people you follow have eaten, and discover new spots through your social circle *(coming later)*
